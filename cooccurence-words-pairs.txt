@@ -1,0 +1,71 @@
+from pyspark.sql import SparkSession
+import string
+from pyspark import SparkContext, SparkConf
+
+
+
+# Lower and Clean a string
+def lower_clean_str(x):
+  punc='!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+  lowercased_str = x.lower()
+  for ch in punc:
+    lowercased_str = lowercased_str.replace(ch, '')
+  return lowercased_str
+
+
+def get_sorted_words(text_file_name):
+   #  Read a text file, split it to words, get unique values, lower words and remove punctuation, filter out duplicate word generated, sort the result keys
+   v_document = spark.read.text(text_file_name).rdd.map(lambda r :r[0])
+   sortedCount = v_document.flatMap(lambda x: x.split(' ')).distinct().map(lambda x : lower_clean_str(x)).distinct().filter(lambda x : x!='').map(lambda x : (x,1)).sortByKey().keys()
+
+   # Generate 2 lists : one with the first element * number of element - 1
+   #                    second one with all elements but the first
+   first = sortedCount.first()
+   second_to_end = sortedCount.filter( lambda x : x != first).collect()
+   #second_to_end.persist() # etudier sur cluster si le fait de garder en memoire ameliore les perfs -> faire un persist en mémoire pour cela
+
+   v_length = len(second_to_end)
+   second_to_end = spark.sparkContext.parallelize(second_to_end)
+
+   first_list = [first] *  v_length
+
+   # Add index to each lists to prepare an aggregate
+   firsts = spark.sparkContext.parallelize(first_list).zipWithIndex()
+   second_to_end = second_to_end.zipWithIndex().collect()
+
+
+
+   words = []
+   for (c_word, unitcount) in second_to_end:
+      words.append(c_word)
+
+   return words
+
+
+spark = SparkSession\
+        .builder\
+        .appName("gkl_word_cooccurrences")\
+        .getOrCreate()
+
+#appName = "gkl_word_cooccurrences"
+#conf = SparkConf().setAppName(appName).setMaster('local')
+#sc = SparkContext(conf=conf)
+
+# Read file and return the ordered word list
+sorted_words  = get_sorted_words("texte1.txt")
+print(sorted_words)
+
+# Option : remove stop words
+# stop_word_list = ['a', "une", ...]
+# rdd =  rdd.filter(lambda x : x not in stop_word_list)
+# rdd.take()
+
+
+
+
+
+
+
+
+spark.stop()
+
